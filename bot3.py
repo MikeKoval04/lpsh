@@ -95,7 +95,7 @@ def format_message_html(text: str) -> str:
     """
     Форматирует сообщение для Telegram с использованием HTML:
     - Конвертирует *текст* в курсив <i>текст</i>
-    - Конвертирует строки в *астериксах* в blockquote
+    - Удаляет строки полностью в *астериксах* (они не нужны в финальном сообщении)
     - Экранирует специальные символы HTML
     """
     import re
@@ -106,11 +106,9 @@ def format_message_html(text: str) -> str:
     for line in lines:
         stripped = line.strip()
         
-        # Проверяем, если вся строка в астериксах
+        # Проверяем, если вся строка в астериксах - пропускаем её (это описание действий)
         if stripped.startswith('*') and stripped.endswith('*') and len(stripped) > 1:
-            content = stripped.strip('*').strip()
-            content = escape_html(content)
-            formatted_lines.append(f'<blockquote>{content}</blockquote>')
+            continue  # Полностью удаляем такие строки
         else:
             # Обрабатываем курсив внутри строки
             # Заменяем *текст* на <i>текст</i>
@@ -119,7 +117,10 @@ def format_message_html(text: str) -> str:
             formatted_line = formatted_line.replace('<i>', '|||ITALIC_START|||').replace('</i>', '|||ITALIC_END|||')
             formatted_line = escape_html(formatted_line)
             formatted_line = formatted_line.replace('|||ITALIC_START|||', '<i>').replace('|||ITALIC_END|||', '</i>')
-            formatted_lines.append(formatted_line)
+            
+            # Добавляем строку только если она не пустая после обработки
+            if formatted_line.strip():
+                formatted_lines.append(formatted_line)
     
     return '\n'.join(formatted_lines)
 
