@@ -326,11 +326,14 @@ async def get_feedback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         save_message_to_json(chat_id, "assistant", feedback)
         
         # Отправляем обратную связь
-        await update.message.reply_text(
-            feedback,
-            parse_mode="HTML",
-            reply_markup=get_reply_keyboard()
-        )
+        chunk_size = 1024
+        chunks = [feedback[i:i + chunk_size] for i in range(0, len(feedback), chunk_size)]
+        for idx, chunk in enumerate(chunks):
+            await update.message.reply_text(
+                chunk,
+                parse_mode="HTML",
+                reply_markup=get_reply_keyboard() if idx == len(chunks) - 1 else None
+            )
     
     except Exception as e:
         logging.error(f"Ошибка при получении обратной связи: {e}")
