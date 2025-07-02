@@ -84,21 +84,52 @@ def load_chat_history(chat_id: int) -> dict:
     return {"chat_id": chat_id, "messages": []}
 
 # --- formatting helpers --------------------------------------------------
-def asterisk_to_quote(text: str) -> str:
+def escape_html(text: str) -> str:
+    """Экранирует специальные символы HTML"""
+    text = text.replace('&', '&amp;')
+    text = text.replace('<', '&lt;')
+    text = text.replace('>', '&gt;')
+    return text
+
+def format_message_html(text: str) -> str:
     """
-    Converts lines that are fully wrapped in *asterisks* to block‑quotes for Telegram.
-    Example: '*Hello*'  -> '> Hello'
-    Only treats a line as a quote if the asterisks enclose the entire trimmed line.
+    Форматирует сообщение для Telegram с использованием HTML:
+    - Конвертирует *текст* в курсив <i>текст</i>
+    - Конвертирует строки в *астериксах* в blockquote
+    - Экранирует специальные символы HTML
     """
-    new_lines = []
-    for ln in text.splitlines():
-        stripped = ln.strip()
+    import re
+    
+    lines = text.splitlines()
+    formatted_lines = []
+    
+    for line in lines:
+        stripped = line.strip()
+        
+        # Проверяем, если вся строка в астериксах
         if stripped.startswith('*') and stripped.endswith('*') and len(stripped) > 1:
             content = stripped.strip('*').strip()
-            new_lines.append(f'> {content}')
+            content = escape_html(content)
+            formatted_lines.append(f'<blockquote>{content}</blockquote>')
         else:
-            new_lines.append(ln)
-    return '\n'.join(new_lines)
+            # Обрабатываем курсив внутри строки
+            # Заменяем *текст* на <i>текст</i>
+            formatted_line = re.sub(r'\*([^*]+)\*', r'<i>\1</i>', line)
+            # Экранируем HTML, но сохраняем наши теги
+            formatted_line = formatted_line.replace('<i>', '|||ITALIC_START|||').replace('</i>', '|||ITALIC_END|||')
+            formatted_line = escape_html(formatted_line)
+            formatted_line = formatted_line.replace('|||ITALIC_START|||', '<i>').replace('|||ITALIC_END|||', '</i>')
+            formatted_lines.append(formatted_line)
+    
+    return '\n'.join(formatted_lines)
+
+def asterisk_to_quote(text: str) -> str:
+    """
+    Converts lines that are fully wrapped in *asterisks* to block‑quotes for Telegram using HTML.
+    Example: '*Hello*'  -> '<blockquote>Hello</blockquote>'
+    Only treats a line as a quote if the asterisks enclose the entire trimmed line.
+    """
+    return format_message_html(text)
 # -------------------------------------------------------------------------
 
 # 3) /start с описанием бота и согласием
@@ -297,7 +328,7 @@ async def get_feedback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         # Отправляем обратную связь
         await update.message.reply_text(
             feedback,
-            parse_mode="Markdown",
+            parse_mode="HTML",
             reply_markup=get_reply_keyboard()
         )
     
@@ -385,7 +416,7 @@ async def chat(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         # Отправляем ответ
         await update.message.reply_text(
             assistant_reply,
-            parse_mode="Markdown",
+            parse_mode="HTML",
             reply_markup=get_reply_keyboard()
         )
     
