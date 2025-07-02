@@ -100,6 +100,9 @@ def format_message_html(text: str) -> str:
     """
     import re
     
+    # Сначала экранируем все HTML символы
+    text = escape_html(text)
+    
     lines = text.splitlines()
     formatted_lines = []
     
@@ -109,16 +112,12 @@ def format_message_html(text: str) -> str:
         # Проверяем, если вся строка в астериксах
         if stripped.startswith('*') and stripped.endswith('*') and len(stripped) > 1:
             content = stripped.strip('*').strip()
-            content = escape_html(content)
+            # content уже экранирован, добавляем blockquote
             formatted_lines.append(f'<blockquote>{content}</blockquote>')
         else:
-            # Обрабатываем курсив внутри строки
+            # Обрабатываем курсив внутри строки (после экранирования HTML)
             # Заменяем *текст* на <i>текст</i>
             formatted_line = re.sub(r'\*([^*]+)\*', r'<i>\1</i>', line)
-            # Экранируем HTML, но сохраняем наши теги
-            formatted_line = formatted_line.replace('<i>', '|||ITALIC_START|||').replace('</i>', '|||ITALIC_END|||')
-            formatted_line = escape_html(formatted_line)
-            formatted_line = formatted_line.replace('|||ITALIC_START|||', '<i>').replace('|||ITALIC_END|||', '</i>')
             formatted_lines.append(formatted_line)
     
     return '\n'.join(formatted_lines)
@@ -325,15 +324,33 @@ async def get_feedback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         save_message_to_json(chat_id, "user", "Запрос профессиональной обратной связи")
         save_message_to_json(chat_id, "assistant", feedback)
         
-        # Отправляем обратную связь
+        # Отправляем обратную связь по частям
         chunk_size = 1024
         chunks = [feedback[i:i + chunk_size] for i in range(0, len(feedback), chunk_size)]
+        
         for idx, chunk in enumerate(chunks):
-            await update.message.reply_text(
-                chunk,
-                parse_mode="Markdown",
-                reply_markup=get_reply_keyboard() if idx == len(chunks) - 1 else None
-            )
+            try:
+                await update.message.reply_text(
+                    chunk,
+                    parse_mode="HTML",
+                    reply_markup=get_reply_keyboard() if idx == len(chunks) - 1 else None
+                )
+            except Exception as chunk_error:
+                logging.warning(f"Ошибка отправки куска {idx+1}: {chunk_error}")
+                # Пробуем отправить без форматирования
+                try:
+                    await update.message.reply_text(
+                        chunk,
+                        reply_markup=get_reply_keyboard() if idx == len(chunks) - 1 else None
+                    )
+                except Exception as plain_error:
+                    logging.error(f"Не удалось отправить кусок {idx+1} даже без форматирования: {plain_error}")
+                    if idx == 0:  # Если не удалось отправить первый кусок
+                        await update.message.reply_text(
+                            "⚠️ Произошла ошибка при отправке обратной связи",
+                            reply_markup=get_reply_keyboard()
+                        )
+                        return
     
     except Exception as e:
         logging.error(f"Ошибка при получении обратной связи: {e}")
